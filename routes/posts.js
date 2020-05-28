@@ -165,4 +165,78 @@ router.put('/unlike/:id', auth, async (req, res) => {
   }
 });
 
+//@route Post /post/comment/:id
+//@desc Post a Comment
+//@access Private
+
+router.post(
+  '/comment/:id',
+  [auth, [check('text', 'Text is required').not().isEmpty()]],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(404).json({ errors: errors.array() });
+    }
+
+    try {
+      const user = await User.findById(req.user.id).select('-password');
+      const post = await Post.findById(req.params.id);
+      const newComment = {
+        text: req.body.text,
+        user: req.user.id,
+        name: user.name,
+        avatar: user.avatar,
+      };
+
+      post.comment.push(newComment);
+
+      await post.save();
+
+      res.json(post.comment);
+    } catch (err) {
+      console.error(err.message);
+      res.status(500).send('internal server error');
+    }
+  }
+);
+
+//@route Delete /posts/comment/:id/:comment_id
+//@desc Delete a comment
+//@access Private
+
+router.delete('/comment/:id/:comment_id', auth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+
+    //pull out comment
+    const comment = post.comment.find(
+      (comment) => comment.id === req.params.comment_id
+    );
+
+    if (!comment) {
+      return res.status(404).json({ msg: 'Comment not Found' });
+    }
+
+    if (comment.user.toString() !== req.user.id) {
+      return res.status(401).json({ msg: 'User not authorized' });
+    }
+
+    const removeIndex = post.comment
+      .map((comment) => comment.user.toString())
+      .indexOf(req.user.id);
+
+    post.comment.splice(removeIndex, 1);
+
+    await post.save();
+
+    res.json({ msg: 'comment deleted' });
+  } catch (err) {
+    console.error(err.message);
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ msg: 'Comment not Found' });
+    }
+    res.status(500).send('internal server error');
+  }
+});
+
 module.exports = router;
